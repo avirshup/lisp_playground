@@ -11,7 +11,7 @@ pub fn parse_token(t: &Token) -> Result<Expr> {
     match t {
         Token::Word(s) => {
             parse_literal(s)
-                .map(|ct| Expr::Lit(l))
+                .map(|ct| Expr::Lit(ct))
                 .or_else(|_| parse_identifier(s))
         },
 
