@@ -1,0 +1,19 @@
+max_width=82
+group_imports = "StdExternalCrate"
+chain_width=40
+fn_call_width=45
+
+# unstable - must use `cargo +nightly fmt`
+# (in JetBrains Rust, use channel dropdown in rustfmt settings)
+use_field_init_shorthand = true
+force_multiline_blocks = true
+match_block_trailing_comma = true
+wrap_comments = true
+use_try_shorthand = true
+unstable_features = true
+version = "Two"
+comment_width = 100
+error_on_line_overflow = true
+format_strings = true
+imports_granularity = "Module"
+normalize_doc_attributes = true
