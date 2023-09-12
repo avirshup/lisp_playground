@@ -28,6 +28,7 @@ fn parse_literal(s: &str) -> Result<CType> {
         .and_then(_check_suffix)
         .and_then(|r| {
             match r {
+                // NOTE! maybe this should be a special symbol?
                 Literal::Bool(_) => Ok(CType::Bool(s.parse()?)),
 
                 Literal::Integer(_) => Ok(CType::Int(s.parse()?)),
@@ -52,16 +53,29 @@ fn parse_literal(s: &str) -> Result<CType> {
         })
 }
 
-/// Parse a word that must be keyword or a symbol.
+/// Parse a word that must be keyword or a symbol
+/// Or `nil`, which is probably incorrectly treated as a literal?
 /// Must only be called after ensuring that the word is not a literal.
 fn parse_identifier(s: &str) -> Result<Expr> {
     if SYMBOL_RE.is_match(s) {
-        Ok(if s.starts_with(':') {
-            Expr::Keyword(s.to_string())
+        if s.starts_with(':') {
+            // it's a keyword
+            Ok(Expr::Keyword(s.to_string()))
+        } else if s.to_lowercase() == "nil" {
+            // it's probably nil
+            if s == "nil" {
+                Ok(Expr::Lit(CType::Nil))
+            } else {
+                Err(anyhow!(
+                    "`nil` must be lowercase (got '{s}')"
+                ))
+            }
         } else {
-            Expr::Symbol(s.to_string())
-        })
+            // it's a symbol
+            Ok(Expr::Symbol(s.to_string()))
+        }
     } else {
+        // it's invalid
         Err(anyhow!("'{}' is not a keyword or symbol", s))
     }
 }

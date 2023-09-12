@@ -1,5 +1,8 @@
+use std::rc::Rc;
+
 use anyhow::{anyhow, bail, Result};
 
+use super::procs::{Proc, Special};
 use super::token2expr::parse_token;
 use super::tokenizer::Token;
 
@@ -22,19 +25,28 @@ impl CType {
     }
 }
 
-pub type SExpr = Vec<Expr>;
+pub type SExpr = Vec<Rc<Expr>>;
 
+/// Exprs are immutable value-type building blocks
 #[derive(Debug, Clone)]
 pub enum Expr {
     // recursive s-exprs
     SExpr(SExpr),
-    Special(SExpr),
 
     // leaf nodes
     Symbol(String),
     Lit(CType),
     Keyword(String),
+    Proc(&'static Proc),
+    Special(&'static Special),
 }
+
+/*** RECURSION WARNING
+The following function recurses; this is by default limited to a stack of 128.
+This could be fixed with an explicit stack, which was my first attempt.
+The borrow checker did not like it. So, need to learn how build a tree w/out recursion in rust.
+This _could_ be a use case for a bit of `unsafe`? But I think it's possible w/out it.
+ */
 
 /// Build the s-expression from tokens
 /// Will build nested s-expressions via recursion
@@ -50,19 +62,21 @@ fn build_sexpr<'a>(
 
         // add to the current s-expression as indicated via the token
         match token {
+            Token::ParenEnd => {
+                break;
+            },
             Token::ParenStart => {
                 let sub_expr = build_sexpr(token_iter)?;
-                sexpr.push(Expr::SExpr(sub_expr));
-            },
-            Token::ParenEnd => {
-                return Ok(sexpr);
+                sexpr.push(Rc::new(Expr::SExpr(sub_expr)));
             },
             token => {
                 let next_expr = parse_token(token)?;
-                sexpr.push(next_expr);
+                sexpr.push(Rc::new(next_expr));
             },
         }
     }
+
+    Ok(sexpr)
 }
 
 pub fn read_tokens<'a>(
@@ -88,11 +102,13 @@ pub fn read_tokens<'a>(
 
     // ensure tokens were exhausted
     // Surely there's a nicer way to write this
-    if token_iter.next().is_some() {
-        bail!(
-            "S-expression is complete, but tokens remain. Unmatched closing \
-             parentheses?"
-        )
+    if root.is_ok() {
+        if let Some(token) = token_iter.next() {
+            bail!(
+                "S-expression is complete, but tokens remain ({token:#?}). \
+                 Unmatched closing parentheses?"
+            )
+        }
     }
 
     root
