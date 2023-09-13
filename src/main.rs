@@ -1,6 +1,10 @@
 // mod builtins;
+mod builtins;
+mod ctypes;
 mod eval;
 mod expressions;
+// mod functions;
+mod parser;
 mod procs;
 mod scope;
 mod token2expr;
@@ -12,7 +16,8 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use eval::eval;
-use expressions::{read_tokens, Expr, SExpr};
+use expressions::{Expr, SExpr};
+use parser::parse_tokens;
 use scope::Scope;
 
 fn main() {
@@ -25,8 +30,10 @@ fn main() {
     println!("AST: {parse_result:#?}");
 
     if let Ok(expr) = parse_result {
+        let root = Rc::new(builtins::builtins());
+        let mut scope = Scope::child(root);
+
         let expr_ptr = Rc::new(Expr::SExpr(expr));
-        let mut scope = Scope::empty();
         let eval_result = eval(expr_ptr, &mut scope);
         println!("Result: {eval_result:#?}");
     };
@@ -34,5 +41,5 @@ fn main() {
 
 fn parse(s: &str) -> Result<SExpr> {
     let tokens = tokenizer::tokenize(s);
-    read_tokens(&mut tokens.iter())
+    parse_tokens(&mut tokens.iter())
 }

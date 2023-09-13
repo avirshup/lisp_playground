@@ -3,8 +3,9 @@ use lazy_static::lazy_static;
 use litrs::Literal;
 use regex::Regex;
 
-use super::expressions::{CType, Expr};
+use super::expressions::Expr;
 use super::tokenizer::{Quote, Token};
+use crate::ctypes::CType;
 
 /// Parses non-paren tokens
 pub fn parse_token(t: &Token) -> Result<Expr> {

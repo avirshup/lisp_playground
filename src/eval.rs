@@ -53,7 +53,7 @@ pub fn eval(expr: Rc<Expr>, scope: &mut Scope) -> EvalResult {
 /// 4) everything else is a runtime error
 fn eval_sexpr(sexpr: &SExpr, scope: &mut Scope) -> EvalResult {
     if sexpr.is_empty() {
-        return Ok(Rc::new(Expr::SExpr(Vec::new())));
+        return Ok(Rc::new(Expr::empty()));
     }
 
     // evaluate head

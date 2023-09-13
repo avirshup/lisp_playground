@@ -4,14 +4,19 @@ use thiserror::Error;
 
 use super::expressions::Expr;
 use super::scope::Scope;
+use crate::ctypes;
+use crate::ctypes::ConversionError;
 
 #[derive(Error, Debug)]
 pub enum ProcError {
-    #[error("internal error: {0}")]
+    #[error(transparent)]
     InternalError(#[from] anyhow::Error),
 
+    #[error("type error: expected {expected}, got {actual}")]
+    TypeError { expected: String, actual: String },
+
     #[error(
-        "Function {name} takes {arity} argumetns but got {num_args_provided}"
+        "Function {name} takes {arity} arguments but got {num_args_provided}"
     )]
     ArityError {
         name: String,
@@ -44,11 +49,11 @@ impl Arity {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proc {
     pub name: String,
-    arity: Arity,
-    eval: fn(&[Rc<Expr>]) -> ProcResult,
+    pub arity: Arity,
+    pub eval: fn(&[Rc<Expr>]) -> ProcResult,
 }
 
 impl Proc {
@@ -61,10 +66,10 @@ impl Proc {
 
 /// Unlike procs, special form arguments are not evaluated, and
 /// they can access and manipulate the scope
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Special {
     pub name: String,
-    arity: Arity,
+    pub arity: Arity,
     pub eval: fn(&[Rc<Expr>], &mut Scope) -> ProcResult,
 }
 

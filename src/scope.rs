@@ -34,10 +34,6 @@ impl Scope {
         }
     }
 
-    pub fn builtin() -> Self {
-        todo!()
-    }
-
     pub fn lookup(&self, symbol: &str) -> Option<Rc<Expr>> {
         self.symbols
             .get(symbol)
