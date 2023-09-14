@@ -12,15 +12,19 @@ pub fn parse_token(t: &Token) -> Result<Expr> {
     match t {
         Token::Word(s) => {
             parse_literal(s)
-                .map(|ct| Expr::Lit(ct))
+                .map(Expr::Lit)
                 .or_else(|_| parse_identifier(s))
         },
 
-        Token::StringLit(q) => parse_quote(q).map(|ct| Expr::Lit(ct)),
+        Token::StringLit(q) => parse_quote(q).map(Expr::Lit),
 
         _ => Err(anyhow!("Unhandled token type: {:#?}", t)),
     }
 }
+
+/// !!! TODO: we need negative numbers!!! Rust grammar says that the negative sign
+/// is a different token, but we have tokenized it as a single token.
+/// Hmmmm.
 
 /// Try to parse a word as a literal, more or less the same way as rust does
 fn parse_literal(s: &str) -> Result<CType> {
@@ -82,22 +86,35 @@ fn parse_identifier(s: &str) -> Result<Expr> {
 }
 
 /// Parse a quoted string. The current treatment should be nearly identical to
-/// rust, except that single-quotes are treated as equivalent to double-quotes
+/// rust, except that:
+/// A) single-quotes are treated as equivalent to double-quotes, and
+/// B) characters are denoted by the sigil c and must have len 1
 fn parse_quote(quote: &Quote) -> Result<CType> {
     let lits = format!("{}\"{}\"", quote.sigil, quote.content);
-    Literal::parse(lits)
-        .map_err(anyhow::Error::from)
-        .and_then(|r| {
-            match r {
-                Literal::String(sl) => {
-                    Ok(CType::Str(sl.into_value().to_string()))
-                },
-                Literal::ByteString(bl) => {
-                    Ok(CType::Bytes(bl.into_value().to_vec()))
-                },
-                _ => Err(anyhow!("Failed to parse quote: {quote:#?}")),
-            }
-        })
+    if quote.sigil == "c" {
+        let chars: Vec<char> = quote.content.chars().collect();
+        if chars.len() == 1 {
+            Ok(CType::Char(*chars.first().unwrap()))
+        } else {
+            Err(anyhow!(
+                "Quote had sigil `µ` but not exactly one character: {quote:#?}"
+            ))
+        }
+    } else {
+        Literal::parse(lits)
+            .map_err(anyhow::Error::from)
+            .and_then(|r| {
+                match r {
+                    Literal::String(sl) => {
+                        Ok(CType::Str(sl.into_value().to_string()))
+                    },
+                    Literal::ByteString(bl) => {
+                        Ok(CType::Bytes(bl.into_value().to_vec()))
+                    },
+                    _ => Err(anyhow!("Failed to parse quote: {quote:#?}")),
+                }
+            })
+    }
 }
 
 /***********\

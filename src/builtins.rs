@@ -8,12 +8,12 @@ use super::scope::Scope;
 use crate::ctypes;
 use crate::ctypes::{CType, ConversionError};
 use crate::procs::ProcError;
-use crate::procs::ProcError::TypeError;
+use crate::procs::ProcError::Type;
 
 /// Convenience - map a constant conversion failure into a type error
 impl From<ConversionError> for ProcError {
     fn from(err: ConversionError) -> Self {
-        TypeError {
+        Type {
             actual: err.builtin_type,
             // TODO: this should be mapped to the right CType name
             expected: err.rust_type,
@@ -25,7 +25,7 @@ impl From<ConversionError> for ProcError {
 impl From<NotALiteral> for ProcError {
     fn from(err: NotALiteral) -> Self {
         let expr = err.expression;
-        TypeError {
+        Type {
             actual: format!("{expr:#?}"),
             expected: "Expr::Lit".to_string(),
         }
@@ -84,7 +84,7 @@ fn print(args: &[Rc<Expr>]) -> ProcResult {
 /// (No notion of overloading / adding implementations, here anyway)
 fn add(args: &[Rc<Expr>]) -> ProcResult {
     let ctypes: Vec<&CType> = args
-        .into_iter()
+        .iter()
         .map(|expr| expr.as_ref().try_into())
         .collect::<Result<Vec<&CType>, NotALiteral>>()?;
 
@@ -116,8 +116,8 @@ fn add_ctypes(ct1: &CType, ct2: &CType) -> ProcResult {
 
         // not supported
         _ => {
-            Err(TypeError {
-                actual: format!("{ct1:#?} + {ct2:#?}").to_string(),
+            Err(Type {
+                actual: format!("{ct1:#?} + {ct2:#?}"),
                 expected: "Supported addition".to_string(),
             })
         },

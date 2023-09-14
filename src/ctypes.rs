@@ -1,8 +1,10 @@
+use std::fmt::{Display, Formatter};
+
 use thiserror::Error;
 
 use crate::expressions::Expr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CType {
     Str(String),
     Char(char),
@@ -18,6 +20,20 @@ impl CType {
     /// with an Expr::Lit
     pub fn expr(self) -> Expr {
         Expr::Lit(self)
+    }
+}
+
+impl Display for CType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CType::Str(x) => x.fmt(f),
+            CType::Char(x) => x.fmt(f),
+            CType::Int(x) => x.fmt(f),
+            CType::Bytes(_) => write!(f, "not implemented"),
+            CType::Float(x) => x.fmt(f),
+            CType::Bool(x) => x.fmt(f),
+            CType::Nil => write!(f, "Nil"),
+        }
     }
 }
 

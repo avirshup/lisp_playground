@@ -1,4 +1,4 @@
-use Token::{ParenEnd, ParenStart, StringLit, Word};
+use Token::*;
 
 /*************\
 |* Tokenizer *|
@@ -18,6 +18,7 @@ pub struct Quote {
 pub enum Token {
     ParenStart,
     ParenEnd,
+    Dash,
     Word(String),
     StringLit(Quote),
 }
@@ -73,6 +74,10 @@ pub fn tokenize(s: &str) -> Vec<Token> {
             } else if char == ')' {
                 tokens.push(ParenEnd)
             };
+        }
+        // leading dashes become the "dash" token
+        else if current_word.is_empty() && char == '-' {
+            tokens.push(Dash)
 
         // continue with current identifier
         } else {
@@ -121,6 +126,14 @@ mod tests {
                 mark: '\'',
                 content: "hi'hi\\n".to_string()
             })]
+        )
+    }
+
+    #[test]
+    fn test_negative_numbers() {
+        assert_eq!(
+            tokenize("-4.31"),
+            vec![Dash, Word("4.31".to_string())]
         )
     }
 

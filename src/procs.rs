@@ -4,21 +4,19 @@ use thiserror::Error;
 
 use super::expressions::Expr;
 use super::scope::Scope;
-use crate::ctypes;
-use crate::ctypes::ConversionError;
 
 #[derive(Error, Debug)]
 pub enum ProcError {
     #[error(transparent)]
-    InternalError(#[from] anyhow::Error),
+    Internal(#[from] anyhow::Error),
 
     #[error("type error: expected {expected}, got {actual}")]
-    TypeError { expected: String, actual: String },
+    Type { expected: String, actual: String },
 
     #[error(
         "Function {name} takes {arity} arguments but got {num_args_provided}"
     )]
-    ArityError {
+    Arity {
         name: String,
         arity: usize,
         num_args_provided: usize,
@@ -37,7 +35,7 @@ impl Arity {
     pub fn check(&self, name: &str, n_args: usize) -> Result<(), ProcError> {
         if let &Arity::Fixed(arity) = self {
             if n_args != arity {
-                return Err(ProcError::ArityError {
+                return Err(ProcError::Arity {
                     name: name.to_string(),
                     arity,
                     num_args_provided: n_args,
@@ -49,7 +47,7 @@ impl Arity {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proc {
     pub name: String,
     pub arity: Arity,
@@ -66,7 +64,7 @@ impl Proc {
 
 /// Unlike procs, special form arguments are not evaluated, and
 /// they can access and manipulate the scope
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Special {
     pub name: String,
     pub arity: Arity,

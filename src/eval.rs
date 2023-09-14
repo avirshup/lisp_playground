@@ -34,10 +34,10 @@ type EvalResult = Result<Rc<Expr>, EvalError>;
 /// which means it will need to recursively call this function.
 pub fn eval(expr: Rc<Expr>, scope: &mut Scope) -> EvalResult {
     match expr.as_ref() {
-        Expr::SExpr(sexpr) => eval_sexpr(&sexpr, scope),
+        Expr::SExpr(sexpr) => eval_sexpr(sexpr, scope),
         Expr::Symbol(name) => {
             scope
-                .lookup(&name)
+                .lookup(name)
                 .ok_or_else(|| EvalError::LookupError(name.clone()))
         },
         _ => Ok(expr.clone()), // clones the Rc, not the value

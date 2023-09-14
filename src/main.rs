@@ -10,36 +10,65 @@ mod scope;
 mod token2expr;
 mod tokenizer;
 
-use std::io;
-use std::io::Read;
 use std::rc::Rc;
 
 use anyhow::Result;
-use eval::eval;
-use expressions::{Expr, SExpr};
-use parser::parse_tokens;
-use scope::Scope;
+use rustyline::history::DefaultHistory;
+use rustyline::Editor;
 
-fn main() {
-    let mut buffer = String::new();
-    io::stdin()
-        .read_to_string(&mut buffer)
-        .unwrap();
+use crate::eval::eval;
+use crate::expressions::Expr;
+use crate::scope::Scope;
 
-    let parse_result = parse(&buffer);
-    println!("AST: {parse_result:#?}");
+fn main() -> Result<()> {
+    // init scopes
+    let root_scope = Rc::new(builtins::builtins());
+    let mut repl_scope = Scope::child(root_scope);
 
-    if let Ok(expr) = parse_result {
-        let root = Rc::new(builtins::builtins());
-        let mut scope = Scope::child(root);
+    // start reading lines
+    let mut rl = rl_editor()?;
+    loop {
+        // get user input
+        let input = rl.readline(">> ");
+        let Ok(input) = input else {
+            continue;
+        };
+        if input == "exit" || input == "quit" {
+            break;
+        }
 
-        let expr_ptr = Rc::new(Expr::SExpr(expr));
-        let eval_result = eval(expr_ptr, &mut scope);
-        println!("Result: {eval_result:#?}");
-    };
+        // Read
+        let s_exp = match parser::parse_text(&input) {
+            Ok(s_exp) => s_exp,
+            Err(err) => {
+                println!("Parse error: {err}");
+                continue;
+            },
+        };
+
+        // Eval
+        let result = match eval(Rc::new(Expr::SExpr(s_exp)), &mut repl_scope) {
+            Ok(result) => result,
+            Err(err) => {
+                println!("Eval error: {err}");
+                continue;
+            },
+        };
+
+        // Print
+        println!("{result}");
+    }
+
+    Ok(())
 }
 
-fn parse(s: &str) -> Result<SExpr> {
-    let tokens = tokenizer::tokenize(s);
-    parse_tokens(&mut tokens.iter())
+fn rl_editor() -> Result<Editor<(), DefaultHistory>> {
+    let cfg = rustyline::Config::builder()
+        .tab_stop(2)
+        .auto_add_history(true)
+        .bracketed_paste(true)
+        .build();
+
+    // let mut rl = rustyline::Editor::with_config(cfg.build())?;
+    Ok(rustyline::DefaultEditor::with_config(cfg)?)
 }
