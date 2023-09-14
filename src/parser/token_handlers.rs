@@ -3,9 +3,8 @@ use lazy_static::lazy_static;
 use litrs::Literal;
 use regex::Regex;
 
-use super::expressions::Expr;
 use super::tokenizer::{Quote, Token};
-use crate::ctypes::CType;
+use crate::ast::{CType, Expr};
 
 /// Parses non-paren tokens
 pub fn parse_token(t: &Token) -> Result<Expr> {
@@ -22,15 +21,11 @@ pub fn parse_token(t: &Token) -> Result<Expr> {
     }
 }
 
-/// !!! TODO: we need negative numbers!!! Rust grammar says that the negative sign
-/// is a different token, but we have tokenized it as a single token.
-/// Hmmmm.
-
 /// Try to parse a word as a literal, more or less the same way as rust does
 fn parse_literal(s: &str) -> Result<CType> {
     Literal::parse(s)
         .map_err(anyhow::Error::from)
-        .and_then(_check_suffix)
+        .and_then(check_suffix)
         .and_then(|r| {
             match r {
                 // NOTE! maybe this should be a special symbol?
@@ -97,7 +92,7 @@ fn parse_quote(quote: &Quote) -> Result<CType> {
             Ok(CType::Char(*chars.first().unwrap()))
         } else {
             Err(anyhow!(
-                "Quote had sigil `µ` but not exactly one character: {quote:#?}"
+                "Quote had sigil `c` but not exactly one character: {quote:#?}"
             ))
         }
     } else {
@@ -127,7 +122,7 @@ lazy_static! {
 
 /// Ensure literal doesn't have a suffix
 /// E.g., "15" is ok, "15u32" is not, because u32 is a rust thing)
-fn _check_suffix(lit: Literal<&str>) -> Result<Literal<&str>> {
+fn check_suffix(lit: Literal<&str>) -> Result<Literal<&str>> {
     {
         if lit.suffix() == "" {
             Ok(lit)

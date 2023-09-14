@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::expressions::Expr;
+use crate::ast::Expr;
 
 // Question: who owns a child scope?
 

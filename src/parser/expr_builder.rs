@@ -2,10 +2,9 @@ use std::rc::Rc;
 
 use anyhow::{anyhow, bail, Result};
 
-use crate::ctypes::CType;
-use crate::expressions::{Expr, SExpr};
-use crate::token2expr::parse_token;
-use crate::tokenizer::{tokenize, Token};
+use super::token_handlers::parse_token;
+use super::tokenizer::{tokenize, Token};
+use crate::ast::{CType, Expr, SExpr};
 
 /// turn text into an s-expression
 pub fn parse_text(s: &str) -> Result<SExpr> {
@@ -107,7 +106,6 @@ fn try_negate(expr: Expr) -> Result<Expr> {
 mod tests {
 
     use super::*;
-    use crate::ctypes::CType;
 
     fn do_literal_test(input: &str, expected: CType) {
         let wrapped = format!("({input})");

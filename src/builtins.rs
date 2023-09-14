@@ -1,36 +1,10 @@
 use std::rc::Rc;
 
-use ctypes::NotALiteral;
-
-use super::expressions::Expr;
-use super::procs::{Arity, Proc, ProcResult};
 use super::scope::Scope;
-use crate::ctypes;
-use crate::ctypes::{CType, ConversionError};
-use crate::procs::ProcError;
-use crate::procs::ProcError::Type;
-
-/// Convenience - map a constant conversion failure into a type error
-impl From<ConversionError> for ProcError {
-    fn from(err: ConversionError) -> Self {
-        Type {
-            actual: err.builtin_type,
-            // TODO: this should be mapped to the right CType name
-            expected: err.rust_type,
-        }
-    }
-}
-
-/// Convenience - identify
-impl From<NotALiteral> for ProcError {
-    fn from(err: NotALiteral) -> Self {
-        let expr = err.expression;
-        Type {
-            actual: format!("{expr:#?}"),
-            expected: "Expr::Lit".to_string(),
-        }
-    }
-}
+use crate::ast::ProcError::Type;
+use crate::ast::{
+    Arity, CType, ConversionError, Expr, NotALiteral, Proc, ProcError, ProcResult,
+};
 
 pub fn builtins() -> Scope {
     let mut scope = Scope::empty();
@@ -54,6 +28,28 @@ pub fn builtins() -> Scope {
     );
 
     scope
+}
+
+/// Convenience - map a constant conversion failure into a type error
+impl From<ConversionError> for ProcError {
+    fn from(err: ConversionError) -> Self {
+        Type {
+            actual: err.builtin_type,
+            // TODO: this should be mapped to the right CType name
+            expected: err.rust_type,
+        }
+    }
+}
+
+/// Convenience - identify
+impl From<NotALiteral> for ProcError {
+    fn from(err: NotALiteral) -> Self {
+        let expr = err.expression;
+        Type {
+            actual: format!("{expr:#?}"),
+            expected: "Expr::Lit".to_string(),
+        }
+    }
 }
 
 /************\

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use thiserror::Error;
 
 use super::expressions::Expr;
-use super::scope::Scope;
+use crate::scope::Scope;
 
 #[derive(Error, Debug)]
 pub enum ProcError {

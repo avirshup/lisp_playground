@@ -1,14 +1,9 @@
-// mod builtins;
+// TODO: do these need to be in lib _and_ main?
+mod ast;
 mod builtins;
-mod ctypes;
 mod eval;
-mod expressions;
-// mod functions;
 mod parser;
-mod procs;
 mod scope;
-mod token2expr;
-mod tokenizer;
 
 use std::rc::Rc;
 
@@ -16,10 +11,11 @@ use anyhow::Result;
 use rustyline::history::DefaultHistory;
 use rustyline::Editor;
 
+use crate::ast::Expr;
 use crate::eval::eval;
-use crate::expressions::Expr;
 use crate::scope::Scope;
 
+/// The repl
 fn main() -> Result<()> {
     // init scopes
     let root_scope = Rc::new(builtins::builtins());

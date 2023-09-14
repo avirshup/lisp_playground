@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
 use super::procs::{Proc, Special};
-use crate::ctypes::CType;
+use crate::ast::CType;
 
 pub type SExpr = Vec<Rc<Expr>>;
 

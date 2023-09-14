@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use thiserror::Error;
 
-use crate::expressions::Expr;
+use super::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CType {

@@ -2,11 +2,10 @@ use std::rc::Rc;
 
 use thiserror::Error;
 
-use super::expressions::{Expr, SExpr};
-use super::procs;
+use super::ast::{Expr, Proc, SExpr};
 use super::scope::Scope;
+use crate::ast;
 use crate::eval::EvalError::NotAProc;
-use crate::procs::Proc;
 
 #[derive(Error, Debug)]
 pub enum EvalError {
@@ -20,7 +19,7 @@ pub enum EvalError {
     NotAProc(Rc<Expr>),
 
     #[error("Could not evaluate proc: {0}")]
-    ProcError(#[from] procs::ProcError),
+    ProcError(#[from] ast::ProcError),
 }
 
 type EvalResult = Result<Rc<Expr>, EvalError>;
