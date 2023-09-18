@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::ast::{
-    Arity, CallForm, Expr, Function, InternalError, SExpr, Value, Var,
+    Arity, CallForm, Expr, Function, InternalError, OwnedSExpr, SExpr, Value, Var,
 };
 use crate::{EResult, EvalError, Scope};
 
@@ -53,6 +53,92 @@ impl BuiltinFnBuilder for PrintFnBuilder {
         let s: &str = val.try_into()?;
         println!("{s}");
         Ok(Rc::new(Expr::empty()))
+    }
+}
+
+/*********\
+|* First *|
+\*********/
+pub(super) struct FirstFnBuilder {}
+impl BuiltinFnBuilder for FirstFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["first", "car"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["s-exp"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(1)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        if let Some(arg) = args.first() {
+            Ok(arg.clone())
+        } else {
+            Ok(Expr::empty().new_var())
+        }
+    }
+}
+
+/*****************\
+|* Concatenation *|
+\*****************/
+pub(super) struct ConcatFnBuilder {}
+impl BuiltinFnBuilder for ConcatFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["concat"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["s-exp1 s-exp2"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        let first = args.get(0).unwrap().expect_sexp()?;
+        let second = args.get(1).unwrap().expect_sexp()?;
+
+        Ok(Expr::SExpr(
+            first
+                .iter()
+                .chain(second.iter())
+                .map(Rc::clone)
+                .collect::<OwnedSExpr>(),
+        )
+        .new_var())
+    }
+}
+
+/*********\
+|* Rest *|
+\*********/
+pub(super) struct RestFnBuilder {}
+impl BuiltinFnBuilder for RestFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["rest", "cdr"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["s-exp"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(1)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        Ok(Expr::SExpr(
+            args.first().unwrap().expect_sexp()?[1..]
+                .iter()
+                .map(Rc::clone)
+                .collect(),
+        )
+        .new_var())
     }
 }
 

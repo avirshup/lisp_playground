@@ -1,4 +1,7 @@
 use std::rc::Rc;
+use std::sync::Mutex;
+
+use lazy_static::lazy_static;
 
 use crate::ast::{Arity, CallForm, Expr, Function, SExpr, SpecialForm, Var};
 use crate::eval::capture_sexp_references;
@@ -39,6 +42,33 @@ pub(super) trait BuiltinSpecialBuilder {
     ) -> EResult<()>;
 
     // fn close_over(_sexpr: &SExpr, _scope: &Scope) -> Result<Scope, EvalError>;
+}
+
+/******************************\
+|* "Quote" special form impl *|
+\******************************/
+pub(super) struct QuoteFormBuilder;
+impl BuiltinSpecialBuilder for QuoteFormBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["quote"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(1)
+    }
+
+    fn eval(args: &SExpr, _scope: &mut Scope) -> EResult<Var> {
+        Ok(args.first().unwrap().clone())
+    }
+
+    /// binds nothing, right? Not 100% sure actually.
+    fn bind_outer_scope(
+        _args: &SExpr,
+        _scope: &Scope,
+        _capture_scope: &mut Scope,
+    ) -> EResult<()> {
+        Ok(())
+    }
 }
 
 /******************************\
@@ -99,8 +129,8 @@ impl BuiltinSpecialBuilder for DefVarForm {
 ///  Specifically, the following two expressions are equivalent:
 ///     `(define (f a1 a2 ...) (b0 b1 b2 ...))`
 ///     `(define f (lambda a1 a2 ...) (b0 b1 b2 ...))`
-pub(super) struct DefineForm;
-impl BuiltinSpecialBuilder for DefineForm {
+pub(super) struct DefineFormBuilder;
+impl BuiltinSpecialBuilder for DefineFormBuilder {
     fn names() -> Vec<&'static str> {
         vec!["def", "define"]
     }
@@ -114,11 +144,42 @@ impl BuiltinSpecialBuilder for DefineForm {
         let rhs = args.get(1).unwrap();
 
         match lhs.as_ref() {
+            // treat as equivalent to DefVar
             Expr::Symbol(_name) => DefVarForm::eval(args, scope),
+
+            // treat as equivalent to (defvar #0 (lambda ...))
             Expr::SExpr(sexp) => {
-                let lambda_args =
-                    vec![Rc::new(Expr::SExpr(sexp[1..].to_vec())), rhs.clone()];
-                LambdaForm::eval(&lambda_args, scope)
+                // get the function name
+                let fn_name = sexp
+                    .first()
+                    .ok_or(EvalError::Syntax {
+                        expected: "List of symbols".to_string(),
+                        actual: "Empty".to_string(),
+                    })?
+                    .expect_symbol()?;
+
+                // arguments for `lambda`
+                let lambda_args = vec![
+                    Expr::SExpr(
+                        sexp[1..]
+                            .iter()
+                            .map(Rc::clone)
+                            .collect(),
+                    )
+                    .new_var(),
+                    rhs.clone(),
+                ];
+
+                // move new function into scope
+                let form = LambdaFormBuilder::build_function(
+                    fn_name.to_string(),
+                    &lambda_args,
+                    scope,
+                )?;
+
+                scope.set(fn_name, form);
+
+                Ok(Expr::empty().new_var())
             },
             _other => {
                 Err(EvalError::Syntax {
@@ -146,7 +207,11 @@ impl BuiltinSpecialBuilder for DefineForm {
             Expr::SExpr(sexp) => {
                 let lambda_args =
                     vec![Rc::new(Expr::SExpr(sexp[1..].to_vec())), rhs.clone()];
-                LambdaForm::bind_outer_scope(&lambda_args, scope, capture_scope)
+                LambdaFormBuilder::bind_outer_scope(
+                    &lambda_args,
+                    scope,
+                    capture_scope,
+                )
             },
             _other => {
                 Err(EvalError::Syntax {
@@ -170,36 +235,33 @@ impl BuiltinSpecialBuilder for DefineForm {
 /// 1) check that it is in fact a list of symbols
 /// 2) then return their names
 /// TODO: this might need to go somewhere more public?
-fn get_argnames(expr: &Expr) -> Result<Vec<String>, EvalError> {
-    expr.expect_sexp().and_then(|sexpr| {
-        sexpr
-            .iter()
-            .map(|expr| expr.expect_symbol().map(String::from))
-            .collect()
-    })
-}
+pub(super) struct LambdaFormBuilder;
 
-pub(super) struct LambdaForm;
-impl BuiltinSpecialBuilder for LambdaForm {
-    fn names() -> Vec<&'static str> {
-        vec!["lambda", "λ"]
+impl LambdaFormBuilder {
+    fn get_argnames(expr: &Expr) -> Result<Vec<String>, EvalError> {
+        expr.expect_sexp().and_then(|sexpr| {
+            sexpr
+                .iter()
+                .map(|expr| expr.expect_symbol().map(String::from))
+                .collect()
+        })
     }
 
-    fn arity() -> Arity {
-        Arity::Fixed(2)
-    }
-
-    fn eval(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
-        // Lexical bindings
+    fn build_function(
+        name: String,
+        sexpr: &SExpr,
+        scope: &mut Scope,
+    ) -> EResult<Var> {
+        // capture references to outer scope
         let mut capture_scope = Scope::new(None);
-        LambdaForm::bind_outer_scope(sexpr, scope, &mut capture_scope)?;
+        LambdaFormBuilder::bind_outer_scope(sexpr, scope, &mut capture_scope)?;
 
-        // build the function
-        let argnames = get_argnames(sexpr.get(0).unwrap())?;
+        // create function object
+        let argnames = Self::get_argnames(sexpr.get(0).unwrap())?;
         let body = sexpr.get(1).unwrap().expect_sexp()?;
         Ok(Rc::new(
             Function {
-                name: "λ".to_string(),
+                name,
                 arity: Arity::Fixed(argnames.len()),
                 arguments: argnames,
                 form: CallForm::Lambda {
@@ -209,6 +271,30 @@ impl BuiltinSpecialBuilder for LambdaForm {
             }
             .into(),
         ))
+    }
+}
+
+lazy_static! {
+    static ref LAMBDA_COUNTER: Mutex<usize> = Mutex::new(0);
+}
+
+impl BuiltinSpecialBuilder for LambdaFormBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["lambda", "λ"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
+        let name = {
+            let mut count = LAMBDA_COUNTER.lock().unwrap();
+            *count += 1;
+            format!("λ_{count}")
+        };
+
+        Self::build_function(name, sexpr, scope)
     }
 
     /// find names of outer vars that this thing requires.
@@ -223,7 +309,7 @@ impl BuiltinSpecialBuilder for LambdaForm {
         capture_scope: &mut Scope,
     ) -> Result<(), EvalError> {
         // get arguments and function body
-        let argnames = get_argnames(sexpr.get(0).unwrap())?;
+        let argnames = Self::get_argnames(sexpr.get(0).unwrap())?;
         let body = sexpr.get(1).unwrap().expect_sexp()?;
 
         let mut child_outer = outer_scope.child();
