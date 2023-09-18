@@ -4,42 +4,42 @@ use litrs::Literal;
 use regex::Regex;
 
 use super::tokenizer::{Quote, Token};
-use crate::ast::{CType, Expr};
+use crate::ast::{Expr, Value};
 
 /// Parses non-paren tokens
 pub fn parse_token(t: &Token) -> Result<Expr> {
     match t {
         Token::Word(s) => {
             parse_literal(s)
-                .map(Expr::Lit)
+                .map(Expr::Value)
                 .or_else(|_| parse_identifier(s))
         },
 
-        Token::StringLit(q) => parse_quote(q).map(Expr::Lit),
+        Token::StringLit(q) => parse_quote(q).map(Expr::Value),
 
         _ => Err(anyhow!("Unhandled token type: {:#?}", t)),
     }
 }
 
 /// Try to parse a word as a literal, more or less the same way as rust does
-fn parse_literal(s: &str) -> Result<CType> {
+fn parse_literal(s: &str) -> Result<Value> {
     Literal::parse(s)
         .map_err(anyhow::Error::from)
         .and_then(check_suffix)
         .and_then(|r| {
             match r {
-                // NOTE! maybe this should be a special symbol?
-                Literal::Bool(_) => Ok(CType::Bool(s.parse()?)),
+                // TODO: should bools be literals or just symbols?
+                Literal::Bool(_) => Ok(Value::Bool(s.parse()?)),
 
-                Literal::Integer(_) => Ok(CType::Int(s.parse()?)),
+                Literal::Integer(_) => Ok(Value::Int(s.parse()?)),
 
                 Literal::Float(lit) => {
-                    Ok(CType::Float(lit.number_part().parse()?))
+                    Ok(Value::Float(lit.number_part().parse()?))
                 },
 
                 // NOTE: there is no token for this yet
                 Literal::Char(_) => {
-                    Ok(CType::Char(s.chars().next().ok_or(
+                    Ok(Value::Char(s.chars().next().ok_or(
                         anyhow!("No character in string? '{s}'"),
                     )?))
                 },
@@ -64,7 +64,7 @@ fn parse_identifier(s: &str) -> Result<Expr> {
         } else if s.to_lowercase() == "nil" {
             // it's probably nil
             if s == "nil" {
-                Ok(Expr::Lit(CType::Nil))
+                Ok(Expr::Value(Value::Nil))
             } else {
                 Err(anyhow!(
                     "`nil` must be lowercase (got '{s}')"
@@ -84,12 +84,12 @@ fn parse_identifier(s: &str) -> Result<Expr> {
 /// rust, except that:
 /// A) single-quotes are treated as equivalent to double-quotes, and
 /// B) characters are denoted by the sigil c and must have len 1
-fn parse_quote(quote: &Quote) -> Result<CType> {
+fn parse_quote(quote: &Quote) -> Result<Value> {
     let lits = format!("{}\"{}\"", quote.sigil, quote.content);
     if quote.sigil == "c" {
         let chars: Vec<char> = quote.content.chars().collect();
         if chars.len() == 1 {
-            Ok(CType::Char(*chars.first().unwrap()))
+            Ok(Value::Char(*chars.first().unwrap()))
         } else {
             Err(anyhow!(
                 "Quote had sigil `c` but not exactly one character: {quote:#?}"
@@ -101,10 +101,10 @@ fn parse_quote(quote: &Quote) -> Result<CType> {
             .and_then(|r| {
                 match r {
                     Literal::String(sl) => {
-                        Ok(CType::Str(sl.into_value().to_string()))
+                        Ok(Value::Str(sl.into_value().to_string()))
                     },
                     Literal::ByteString(bl) => {
-                        Ok(CType::Bytes(bl.into_value().to_vec()))
+                        Ok(Value::Bytes(bl.into_value().to_vec()))
                     },
                     _ => Err(anyhow!("Failed to parse quote: {quote:#?}")),
                 }

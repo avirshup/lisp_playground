@@ -4,10 +4,10 @@ use anyhow::{anyhow, bail, Result};
 
 use super::token_handlers::parse_token;
 use super::tokenizer::{tokenize, Token};
-use crate::ast::{CType, Expr, SExpr};
+use crate::ast::{Expr, OwnedSExpr, Value};
 
 /// turn text into an s-expression
-pub fn parse_text(s: &str) -> Result<SExpr> {
+pub fn parse_text(s: &str) -> Result<OwnedSExpr> {
     let tokens = tokenize(s);
     parse_tokens(&mut tokens.iter())
 }
@@ -21,7 +21,7 @@ pub fn parse_text(s: &str) -> Result<SExpr> {
 /// think it's possible w/out it.
 pub fn parse_tokens<'a>(
     token_iter: &mut impl Iterator<Item = &'a Token>,
-) -> Result<SExpr> {
+) -> Result<OwnedSExpr> {
     /**********************\
     |* Handle n=0 and n=1 *|
     \**********************/
@@ -56,8 +56,8 @@ pub fn parse_tokens<'a>(
 /// Will build nested s-expressions via recursion
 fn build_sexpr<'a>(
     token_iter: &mut impl Iterator<Item = &'a Token>,
-) -> Result<SExpr> {
-    let mut sexpr = SExpr::new();
+) -> Result<OwnedSExpr> {
+    let mut sexpr = OwnedSExpr::new();
 
     loop {
         let token = token_iter.next().ok_or(anyhow!(
@@ -96,8 +96,8 @@ fn build_sexpr<'a>(
 
 fn try_negate(expr: Expr) -> Result<Expr> {
     match expr {
-        Expr::Lit(CType::Int(n)) => Ok(CType::Int(-n).into()),
-        Expr::Lit(CType::Float(f)) => Ok(CType::Float(-f).into()),
+        Expr::Value(Value::Int(n)) => Ok(Value::Int(-n).into()),
+        Expr::Value(Value::Float(f)) => Ok(Value::Float(-f).into()),
         other => Err(anyhow!("Can't negate expression {other:#?}")),
     }
 }
@@ -107,47 +107,47 @@ mod tests {
 
     use super::*;
 
-    fn do_literal_test(input: &str, expected: CType) {
+    fn do_literal_test(input: &str, expected: Value) {
         let wrapped = format!("({input})");
         let result = parse_text(&wrapped).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(
             *result.first().unwrap().as_ref(),
-            Expr::Lit(expected)
+            Expr::Value(expected)
         );
     }
 
     #[test]
     fn test_parse_ints() {
-        do_literal_test("0", CType::Int(0));
-        do_literal_test("10", CType::Int(10));
-        do_literal_test("00103", CType::Int(103));
+        do_literal_test("0", Value::Int(0));
+        do_literal_test("10", Value::Int(10));
+        do_literal_test("00103", Value::Int(103));
     }
 
     #[test]
     fn test_parse_floats() {
-        do_literal_test("0.", CType::Float(0.));
-        do_literal_test("82.7110", CType::Float(82.7110));
-        do_literal_test("010.", CType::Float(10.));
-        do_literal_test("12e3", CType::Float(12000.));
+        do_literal_test("0.", Value::Float(0.));
+        do_literal_test("82.7110", Value::Float(82.7110));
+        do_literal_test("010.", Value::Float(10.));
+        do_literal_test("12e3", Value::Float(12000.));
     }
 
     #[test]
     fn test_parse_chars() {
-        do_literal_test("c'0'", CType::Char('0'));
-        do_literal_test("c\"👋\"", CType::Char('👋'));
-        do_literal_test("c\"µ\"", CType::Char('µ'));
+        do_literal_test("c'0'", Value::Char('0'));
+        do_literal_test("c\"👋\"", Value::Char('👋'));
+        do_literal_test("c\"µ\"", Value::Char('µ'));
     }
 
     #[test]
     fn test_parse_negative_numbers() {
-        do_literal_test("-1", CType::Int(-1));
-        do_literal_test("-0", CType::Int(-0));
-        do_literal_test("- 0010", CType::Int(-10));
+        do_literal_test("-1", Value::Int(-1));
+        do_literal_test("-0", Value::Int(-0));
+        do_literal_test("- 0010", Value::Int(-10));
 
-        do_literal_test("-  0.", CType::Float(-0.));
-        do_literal_test("- 82.7110", CType::Float(-82.7110));
-        do_literal_test("-010.", CType::Float(-10.));
-        do_literal_test("- 12e3", CType::Float(-12000.));
+        do_literal_test("-  0.", Value::Float(-0.));
+        do_literal_test("- 82.7110", Value::Float(-82.7110));
+        do_literal_test("-010.", Value::Float(-10.));
+        do_literal_test("- 12e3", Value::Float(-12000.));
     }
 }

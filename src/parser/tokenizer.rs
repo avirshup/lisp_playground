@@ -9,9 +9,9 @@ use Token::*;
 \*************/
 #[derive(Debug, Clone, PartialEq)]
 pub struct Quote {
-    pub sigil: String,
-    pub mark: char,
-    pub content: String,
+    pub(super) sigil: String,
+    pub(super) mark: char,
+    pub(super) content: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

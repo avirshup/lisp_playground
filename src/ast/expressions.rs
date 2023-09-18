@@ -1,28 +1,90 @@
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-use super::procs::{Proc, Special};
-use crate::ast::CType;
+use super::{EvalError, Function, SpecialForm, Value};
 
-pub type SExpr = Vec<Rc<Expr>>;
+/****************\
+|* Type aliases *|
+\****************/
+/// `Vars` are our AST nodes, represented as a pointer to an
+/// expression
+pub type Var = Rc<Expr>;
 
+/// An S-expression is a slice of Vars
+/// This will always show up in the form &SExpr
+pub type SExpr = [Var];
+
+/// Like SExpr, but owned
+pub type OwnedSExpr = Vec<Var>;
+
+/***************\
+|* Expressions *|
+\***************/
 /// Exprs are immutable value-type building blocks
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
-    // recursive s-exprs
-    SExpr(SExpr),
-
-    // leaf nodes
+    SExpr(OwnedSExpr),
+    Function(Function),
+    Special(SpecialForm),
     Symbol(String),
-    Lit(CType),
+    Value(Value),
     Keyword(String),
-    Proc(Proc),
-    Special(Special),
 }
 
 impl Expr {
     pub fn empty() -> Self {
         Expr::SExpr(Vec::new())
+    }
+
+    pub fn new_var(self) -> Var {
+        Rc::new(self)
+    }
+
+    pub fn type_str(&self) -> &'static str {
+        match self {
+            Expr::SExpr(_) => "S-expression",
+            Expr::Symbol(_) => "Symbol",
+            Expr::Value(_) => "Value",
+            Expr::Keyword(_) => "Keyword",
+            Expr::Function(_) => "Function",
+            Expr::Special(_) => "SpecialForm",
+        }
+    }
+
+    pub fn expect_symbol(&self) -> Result<&str, EvalError> {
+        match self {
+            Expr::Symbol(name) => Ok(name),
+            _other => {
+                Err(EvalError::Syntax {
+                    expected: "Symbol".to_string(),
+                    actual: self.type_str().to_string(),
+                })
+            },
+        }
+    }
+
+    pub fn expect_sexp(&self) -> Result<&SExpr, EvalError> {
+        match self {
+            Expr::SExpr(sexp) => Ok(sexp),
+            _other => {
+                Err(EvalError::Syntax {
+                    expected: "S-expression".to_string(),
+                    actual: self.type_str().to_string(),
+                })
+            },
+        }
+    }
+
+    pub fn expect_special(&self) -> Result<&SpecialForm, EvalError> {
+        match self {
+            Expr::Special(special) => Ok(special),
+            _other => {
+                Err(EvalError::Syntax {
+                    expected: "Special".to_string(),
+                    actual: self.type_str().to_string(),
+                })
+            },
+        }
     }
 }
 
@@ -31,10 +93,10 @@ impl Display for Expr {
         match self {
             Expr::SExpr(sexp) => write!(f, "{}", display_sexp(sexp)),
             Expr::Symbol(name) => write!(f, "#Symbol[{}]", name),
-            Expr::Lit(ctype) => ctype.fmt(f),
             Expr::Keyword(s) => write!(f, ":{}", s),
-            Expr::Proc(p) => write!(f, "#Proc[{}]", p.name),
-            Expr::Special(form) => write!(f, "#Form[{}]", form.name),
+            Expr::Value(ctype) => ctype.fmt(f),
+            Expr::Function(func) => func.fmt(f),
+            Expr::Special(s) => s.fmt(f),
         }
     }
 }
@@ -47,23 +109,3 @@ fn display_sexp(sexp: &SExpr) -> String {
         .join(" ");
     format!("( {items} )")
 }
-
-// Coercion sugar to make it easier to create exprs
-macro_rules! impl_from_expr {
-    ($($t:ty, $v:ident);* $(;)?) => {
-        $(
-            impl From<$t> for Expr {
-                fn from(value: $t) -> Self {
-                    Expr::$v(value)
-                }
-            }
-        )*
-    };
-}
-
-impl_from_expr!(
-    CType, Lit;
-    Proc, Proc;
-    Special, Special;
-    SExpr, SExpr;
-);
