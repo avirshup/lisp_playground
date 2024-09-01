@@ -32,14 +32,14 @@ impl Display for SpecialForm {
 /*************\
 |* Functions *|
 \*************/
-// static mut COUNTER: usize = 0;
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: String,
     pub arity: Arity,
     pub arguments: Vec<String>,
     pub form: CallForm,
+    // TODO: add metadata (maybe arbitrary like clojure,
+    //    maybe also some fixed fields like __doc__, __module__, etc)
 }
 
 impl Display for Function {

@@ -1,7 +1,12 @@
+use std::iter::Map;
 use std::rc::Rc;
 
+use itertools::Itertools;
+
+use crate::ast::Expr::Record;
 use crate::ast::{
-    Arity, CallForm, Expr, Function, InternalError, OwnedSExpr, SExpr, Value, Var,
+    Arity, CallForm, Expr, Function, InternalError, Mapping, OwnedSExpr, SExpr,
+    Value, Var,
 };
 use crate::{EResult, EvalError, Scope};
 
@@ -24,10 +29,40 @@ pub(super) trait BuiltinFnBuilder {
             .for_each(|s| scope.set(s, form.clone()))
     }
 
+    /// names to bind to this function
     fn names() -> Vec<&'static str>;
+
+    /// names of the function's arguments
     fn arguments() -> Vec<&'static str>;
+
+    /// variadic or fixed function arity
     fn arity() -> Arity;
+
+    /// Callback to evaluate a call to the function.
+    /// Will be be passed an s-exp of its arguments' values.
     fn eval(sexpr: &SExpr) -> EResult<Var>;
+}
+
+/************\
+|* Identity *|
+\************/
+pub(super) struct IdentityFnBuilder {}
+impl BuiltinFnBuilder for IdentityFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["I", "echo"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["s"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Variadic
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        Ok(Expr::SExpr(Vec::from(args)).new_var())
+    }
 }
 
 /*********\
@@ -92,7 +127,7 @@ impl BuiltinFnBuilder for ConcatFnBuilder {
     }
 
     fn arguments() -> Vec<&'static str> {
-        vec!["s-exp1 s-exp2"]
+        vec!["s-exp1", "s-exp2"]
     }
 
     fn arity() -> Arity {
@@ -142,6 +177,53 @@ impl BuiltinFnBuilder for RestFnBuilder {
     }
 }
 
+/******************\
+|* Record builder *|
+\******************/
+/// Builds a mapping (aka record)
+/// TODO: Something not right here.
+///     Shouldn't need to quote the arguments (also
+///     this means symbols get passed unevaluated,
+///     which is not right ...)
+///     Q: Should this be a special form so we can control the evaluation?
+///     Q: Or should I just make a special syntax for k/v pairs?
+///
+///  Currently you could write this as:
+/// `(record (echo :key1 val1) (echo :key2 val2)) [...])`
+/// Which sucks and is stupid to look at but otherwise works.
+pub(super) struct RecordFnBuilder {}
+impl BuiltinFnBuilder for RecordFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["record"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["kv_pairs"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Variadic
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        args.iter()
+            .map(|v| {
+                v.expect_sexp_with_len(2)
+                    .and_then(|vec| {
+                        Ok((
+                            vec.get(0)
+                                .unwrap()
+                                .expect_keyword()?
+                                .to_owned(),
+                            vec.get(1).unwrap().clone(),
+                        ))
+                    })
+            })
+            .collect::<EResult<Mapping>>()
+            .map(|mapping| Record(mapping).new_var())
+    }
+}
+
 /*********\
 |* Add   *|
 \*********/
@@ -160,7 +242,7 @@ impl BuiltinFnBuilder for AddFnBuilder {
     }
 
     /// temporary add implementation
-    /// This needs a type system to do dispath for us.
+    /// This needs a type system to do dispatch for us.
     fn eval(args: &SExpr) -> EResult<Var> {
         let ctypes: Vec<&Value> = args
             .iter()

@@ -1,8 +1,6 @@
-use Token::*;
+use std::iter::Peekable;
 
-/*************\
-|* Tokenizer *|
-\*************/
+use Token::*;
 
 /*************\
 |* Tokenizer *|
@@ -55,7 +53,9 @@ pub fn tokenize(s: &str) -> Vec<Token> {
             }
             current_quote = Some(quote);
         }
-        // start a quote
+        /***************\
+        |* Quote start *|
+        \***************/
         else if char == '\'' || char == '"' {
             current_quote = Some(Quote {
                 sigil: current_word.clone(),

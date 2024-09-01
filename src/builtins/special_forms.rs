@@ -3,8 +3,10 @@ use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
-use crate::ast::{Arity, CallForm, Expr, Function, SExpr, SpecialForm, Var};
-use crate::eval::capture_sexp_references;
+use crate::ast::{
+    Arity, CallForm, Expr, Function, SExpr, SpecialForm, Value, Var,
+};
+use crate::builtins::functions::BuiltinFnBuilder;
 use crate::{eval, EResult, EvalError, Scope};
 
 /** See also:
@@ -14,8 +16,8 @@ use crate::{eval, EResult, EvalError, Scope};
 **/
 
 /// Helper trait for defining built-in special forms.
-/// We never actually build any of these,
-/// it's just a bit easier to group them by namespace.
+/// Note: currently we don't instantiate structs for any of these,
+/// these traits are just namespaces to group the methods for each form.
 pub(super) trait BuiltinSpecialBuilder {
     fn register(scope: &mut Scope) {
         let names = Self::names();
@@ -32,16 +34,71 @@ pub(super) trait BuiltinSpecialBuilder {
             .for_each(|s| scope.set(s, form.clone()))
     }
 
+    /// the built-in names that refer to this special form
     fn names() -> Vec<&'static str>;
+
+    /// variadic or fixed arity
     fn arity() -> Arity;
+
+    /// called with list of arguments and enclosing scope
     fn eval(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var>;
+
+    /// Builds the scope in which to evaluated this forms' arguments,
+    /// if applicable. This is *early* binding - given the outer scope,
+    /// it should update the "capture scope" with any values it needs to capture.
+    ///
+    /// Need not be implemented if not applicable to the special form;
+    /// by default is a no-op.
+    ///
+    ///  # Arguments
+    ///  - `args` - input: the form's _un-evaluated_ arguments.
+    ///  - `scope` - input: the enclosing scope.
+    ///  - `capture_scope` - in/out: the captured scope for evaluating the form's
+    ///    arguments
+    fn bind_outer_scope(
+        _args: &SExpr,
+        _scope: &Scope,
+        _capture_scope: &mut Scope,
+    ) -> EResult<()> {
+        Ok(())
+    }
+}
+
+/******************************\
+|* "If" special form impl     *|
+\******************************/
+pub(super) struct IfFormBuilder;
+impl BuiltinSpecialBuilder for IfFormBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["if"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(3)
+    }
+
+    /// Evaluate 1st argument then _either_ the 2nd or 3rd argument, not both
+    fn eval(args: &SExpr, scope: &mut Scope) -> EResult<Var> {
+        let determinant = eval(args.first().unwrap(), scope)?;
+        let Expr::Value(Value::Bool(result)) = determinant.as_ref() else {
+            return Err(EvalError::Type {
+                expected: "Bool".to_string(),
+                actual: determinant.type_str().to_string(),
+            });
+        };
+
+        let idx: usize = if *result { 1 } else { 2 };
+        eval(args.get(idx).unwrap(), scope)
+    }
+
+    /// capture references for all arguments
     fn bind_outer_scope(
         args: &SExpr,
         scope: &Scope,
         capture_scope: &mut Scope,
-    ) -> EResult<()>;
-
-    // fn close_over(_sexpr: &SExpr, _scope: &Scope) -> Result<Scope, EvalError>;
+    ) -> EResult<()> {
+        eval::bind_sexpr_outer_scope(args, scope, capture_scope)
+    }
 }
 
 /******************************\
@@ -54,21 +111,19 @@ impl BuiltinSpecialBuilder for QuoteFormBuilder {
     }
 
     fn arity() -> Arity {
-        Arity::Fixed(1)
+        Arity::Variadic
     }
 
     fn eval(args: &SExpr, _scope: &mut Scope) -> EResult<Var> {
-        Ok(args.first().unwrap().clone())
+        Ok(Expr::SExpr(Vec::from(args)).new_var())
     }
 
-    /// binds nothing, right? Not 100% sure actually.
-    fn bind_outer_scope(
-        _args: &SExpr,
-        _scope: &Scope,
-        _capture_scope: &mut Scope,
-    ) -> EResult<()> {
-        Ok(())
-    }
+    // TODO: binds nothing, right? Not 100% sure
+    // fn bind_outer_scope(
+    //     _args: &SExpr,
+    //     _scope: &Scope,
+    //     _capture_scope: &mut Scope,
+    // ) -> EResult<()> {panic!("at the disco")}
 }
 
 /******************************\
@@ -104,9 +159,7 @@ impl BuiltinSpecialBuilder for DefVarForm {
         let rhs = args.get(1).unwrap();
 
         // capture any variables necessary to evaluate the RHS
-        if let Expr::SExpr(body) = rhs.as_ref() {
-            capture_sexp_references(body, scope, capture_scope)?;
-        }
+        eval::bind_outer_scope(rhs, scope, capture_scope)?;
 
         // if not already part of the closure, make this
         // symbol its own _Symbol_ in the capture scope (?)
@@ -226,14 +279,9 @@ impl BuiltinSpecialBuilder for DefineFormBuilder {
 /******************************\
 |* "Lambda" special form impl *|
 \******************************/
-/// TODO: Keyword args with swift-style caller/callee names.
-///     They keyword arg is what the caller sees, but the variable name
-///     is what the function sees?
-/// Clojure version: https://clojure.org/news/2021/03/18/apis-serving-people-and-programs
-
-/// Given an expression that's _supposed_ to be an argument list:
-/// 1) check that it is in fact a list of symbols
-/// 2) then return their names
+/// Given the argument list in a function/lambda declaration.
+/// 1) check that it is in fact a list of symbol names, and then
+/// 2) return them as a vector
 /// TODO: this might need to go somewhere more public?
 pub(super) struct LambdaFormBuilder;
 
@@ -274,6 +322,7 @@ impl LambdaFormBuilder {
     }
 }
 
+// a counter for generating unique names for our lambdas
 lazy_static! {
     static ref LAMBDA_COUNTER: Mutex<usize> = Mutex::new(0);
 }
@@ -288,6 +337,8 @@ impl BuiltinSpecialBuilder for LambdaFormBuilder {
     }
 
     fn eval(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
+        // TODO: deal with LAMBDA_COUNTER overflow
+        // (should just restart at 0)
         let name = {
             let mut count = LAMBDA_COUNTER.lock().unwrap();
             *count += 1;
@@ -317,9 +368,21 @@ impl BuiltinSpecialBuilder for LambdaFormBuilder {
             child_outer.set(&name, Expr::Symbol(name.clone()).new_var())
         }
 
-        capture_sexp_references(body, &child_outer, capture_scope)
+        eval::bind_sexpr_outer_scope(body, &child_outer, capture_scope)
     }
 }
+
+/******************************\
+|* BELOW: unimplemented ideas *|
+\******************************/
+
+// IDEA: Keyword args with swift-style caller/callee names.
+//     They keyword arg is what the caller sees, but the variable name
+//     is what the function sees?
+//     See also Clojure version: https://clojure.org/news/2021/03/18/apis-serving-people-and-programs
+//     Dumb Q: should that go here or in the AST/parser?
+//     A: obviously here, we'll need to attach enough information
+//       to the function to remap the keyword args.
 
 /******************************\
 |* "special" builder form impl *|

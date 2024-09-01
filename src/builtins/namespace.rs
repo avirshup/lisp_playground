@@ -13,11 +13,13 @@ pub fn builtins() -> Scope {
     special_forms::DefineFormBuilder::register(&mut scope);
 
     // functions
+    functions::IdentityFnBuilder::register(&mut scope);
     functions::PrintFnBuilder::register(&mut scope);
     functions::AddFnBuilder::register(&mut scope);
     functions::FirstFnBuilder::register(&mut scope);
     functions::RestFnBuilder::register(&mut scope);
     functions::ConcatFnBuilder::register(&mut scope);
+    functions::RecordFnBuilder::register(&mut scope);
 
     scope
 }

@@ -1,7 +1,9 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{format, Display, Formatter};
 use std::rc::Rc;
 
-use super::{EvalError, Function, SpecialForm, Value};
+use itertools::Itertools;
+
+use super::{EvalError, Function, Mapping, SpecialForm, Value};
 
 /****************\
 |* Type aliases *|
@@ -28,6 +30,7 @@ pub enum Expr {
     Special(SpecialForm),
     Symbol(String),
     Value(Value),
+    Record(Mapping),
     Keyword(String),
 }
 
@@ -48,6 +51,7 @@ impl Expr {
             Expr::Keyword(_) => "Keyword",
             Expr::Function(_) => "Function",
             Expr::Special(_) => "SpecialForm",
+            Expr::Record(_) => "Record",
         }
     }
 
@@ -63,6 +67,18 @@ impl Expr {
         }
     }
 
+    pub fn expect_keyword(&self) -> Result<&str, EvalError> {
+        match self {
+            Expr::Keyword(name) => Ok(name),
+            _other => {
+                Err(EvalError::Syntax {
+                    expected: "Keyword".to_string(),
+                    actual: self.type_str().to_string(),
+                })
+            },
+        }
+    }
+
     pub fn expect_sexp(&self) -> Result<&SExpr, EvalError> {
         match self {
             Expr::SExpr(sexp) => Ok(sexp),
@@ -72,6 +88,20 @@ impl Expr {
                     actual: self.type_str().to_string(),
                 })
             },
+        }
+    }
+
+    pub fn expect_sexp_with_len(&self, len: usize) -> Result<&SExpr, EvalError> {
+        let sexp = self.expect_sexp()?;
+        let actual_len = sexp.len();
+
+        if actual_len != len {
+            Err(EvalError::Syntax {
+                expected: format!("S-expression w/ length {len}"),
+                actual: format!("Length {len}"),
+            })
+        } else {
+            Ok(sexp)
         }
     }
 
@@ -97,10 +127,13 @@ impl Display for Expr {
             Expr::Value(ctype) => ctype.fmt(f),
             Expr::Function(func) => func.fmt(f),
             Expr::Special(s) => s.fmt(f),
+            Expr::Record(rec) => write!(f, "{}", display_record(rec)),
         }
     }
 }
 
+// TODO: this could go much faster by taking the `&mut Formatter` buffer
+//   and writing into it directly
 fn display_sexp(sexp: &SExpr) -> String {
     let items = sexp
         .iter()
@@ -108,4 +141,13 @@ fn display_sexp(sexp: &SExpr) -> String {
         .collect::<Vec<String>>()
         .join(" ");
     format!("( {items} )")
+}
+
+fn display_record(record: &Mapping) -> String {
+    let formatter = record
+        .iter()
+        .format_with(", ", |(k, v), f| {
+            f(&format_args!("  :{k}->{v}"))
+        });
+    format!("{{\n{}\n}}", formatter)
 }

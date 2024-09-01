@@ -8,7 +8,23 @@ use crate::{EResult, Scope};
 /// (`lambda` / `define`, in particular).
 ///
 /// See **_extensive_** discussion in LEXICAL_BINDING.md.
-pub fn capture_sexp_references(
+pub fn bind_outer_scope(
+    var: &Var,
+    outer_scope: &Scope,
+    capture_scope: &mut Scope,
+) -> EResult<()> {
+    match var.as_ref() {
+        Expr::SExpr(inner_sexpr) => {
+            bind_sexpr_outer_scope(inner_sexpr, outer_scope, capture_scope)
+        },
+        Expr::Symbol(_) => {
+            capture_symbol_reference(var, outer_scope, capture_scope)
+        },
+        _ => Ok(()),
+    }
+}
+
+pub fn bind_sexpr_outer_scope(
     sexpr: &SExpr,
     outer_scope: &Scope,
     capture_scope: &mut Scope,
@@ -25,23 +41,7 @@ pub fn capture_sexp_references(
     } else {
         // capture references for each s-xep
         for var in sexpr.iter() {
-            match var.as_ref() {
-                Expr::SExpr(inner_sexpr) => {
-                    capture_sexp_references(
-                        inner_sexpr,
-                        outer_scope,
-                        capture_scope,
-                    )?
-                },
-                Expr::Symbol(_) => {
-                    capture_symbol_reference(
-                        var.clone(),
-                        outer_scope,
-                        capture_scope,
-                    )?
-                },
-                _ => (),
-            }
+            bind_outer_scope(var, outer_scope, capture_scope)?
         }
         Ok(())
     }
@@ -56,7 +56,7 @@ pub fn capture_sexp_references(
 ///     I'm sure this method breaks with some meta-programming edge case or
 ///     something.
 fn capture_symbol_reference(
-    symbol: Var,
+    symbol: &Var,
     outer_scope: &Scope,
     capture_scope: &mut Scope,
 ) -> EResult<()> {
@@ -65,7 +65,7 @@ fn capture_symbol_reference(
         let outer_val = outer_scope.lookup_or_error(name)?;
 
         // don't capture it if it's tautological
-        if outer_val == symbol {
+        if outer_val == *symbol {
             return Ok(());
         }
 
