@@ -1,10 +1,8 @@
-use std::rc::Rc;
-
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 
 use super::token_handlers::parse_token;
-use super::tokenizer::{tokenize, Token};
-use crate::ast::{Expr, OwnedSExpr, Value};
+use super::tokenizer::{Token, tokenize};
+use crate::ast::{Expr, OwnedSExpr, Value, Var};
 
 /// turn text into an s-expression
 pub fn parse_text(s: &str) -> Result<OwnedSExpr> {
@@ -71,7 +69,7 @@ fn build_sexpr<'a>(
             },
             Token::ParenStart => {
                 let sub_expr = build_sexpr(token_iter)?;
-                sexpr.push(Rc::new(Expr::SExpr(sub_expr)));
+                sexpr.push(Var::new(Expr::SExpr(sub_expr)));
             },
             Token::Dash => {
                 let next_expr = token_iter
@@ -81,12 +79,12 @@ fn build_sexpr<'a>(
                     ))
                     .and_then(parse_token)
                     .and_then(try_negate)?;
-                sexpr.push(Rc::new(next_expr));
+                sexpr.push(Var::new(next_expr));
             },
 
             token => {
                 let next_expr = parse_token(token)?;
-                sexpr.push(Rc::new(next_expr));
+                sexpr.push(Var::new(next_expr));
             },
         }
     }

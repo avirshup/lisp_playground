@@ -16,10 +16,16 @@ pub fn builtins() -> Scope {
     functions::IdentityFnBuilder::register(&mut scope);
     functions::PrintFnBuilder::register(&mut scope);
     functions::AddFnBuilder::register(&mut scope);
+    functions::LenFnBuilder::register(&mut scope);
     functions::FirstFnBuilder::register(&mut scope);
     functions::RestFnBuilder::register(&mut scope);
     functions::ConcatFnBuilder::register(&mut scope);
     functions::RecordFnBuilder::register(&mut scope);
+    functions::RangeFnBuilder::register(&mut scope);
+    functions::MapFnBuilder::register(&mut scope);
+    functions::EqFnBuilder::register(&mut scope);
+    functions::NeqFnBuilder::register(&mut scope);
+    functions::NegateFnBuilder::register(&mut scope);
 
     scope
 }

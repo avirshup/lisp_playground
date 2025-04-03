@@ -1,16 +1,10 @@
-use std::fmt::{format, Display, Formatter};
-use std::rc::Rc;
+use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
 use super::{EvalError, Function, Mapping, SpecialForm, Value};
-
-/****************\
-|* Type aliases *|
-\****************/
-/// `Vars` are our AST nodes, represented as a pointer to an
-/// expression
-pub type Var = Rc<Expr>;
+use crate::InternalError;
+use crate::ast::variables::Var;
 
 /// An S-expression is a slice of Vars
 /// This will always show up in the form &SExpr
@@ -19,9 +13,6 @@ pub type SExpr = [Var];
 /// Like SExpr, but owned
 pub type OwnedSExpr = Vec<Var>;
 
-/***************\
-|* Expressions *|
-\***************/
 /// Exprs are immutable value-type building blocks
 #[derive(Debug, PartialEq)]
 pub enum Expr {
@@ -39,10 +30,6 @@ impl Expr {
         Expr::SExpr(Vec::new())
     }
 
-    pub fn new_var(self) -> Var {
-        Rc::new(self)
-    }
-
     pub fn type_str(&self) -> &'static str {
         match self {
             Expr::SExpr(_) => "S-expression",
@@ -56,26 +43,24 @@ impl Expr {
     }
 
     pub fn expect_symbol(&self) -> Result<&str, EvalError> {
-        match self {
-            Expr::Symbol(name) => Ok(name),
-            _other => {
-                Err(EvalError::Syntax {
-                    expected: "Symbol".to_string(),
-                    actual: self.type_str().to_string(),
-                })
-            },
+        if let Expr::Symbol(name) = self {
+            Ok(name)
+        } else {
+            Err(EvalError::Syntax {
+                expected: "Symbol".to_string(),
+                actual: self.type_str().to_string(),
+            })
         }
     }
 
     pub fn expect_keyword(&self) -> Result<&str, EvalError> {
-        match self {
-            Expr::Keyword(name) => Ok(name),
-            _other => {
-                Err(EvalError::Syntax {
-                    expected: "Keyword".to_string(),
-                    actual: self.type_str().to_string(),
-                })
-            },
+        if let Expr::Keyword(name) = self {
+            Ok(name)
+        } else {
+            Err(EvalError::Syntax {
+                expected: "Keyword".to_string(),
+                actual: self.type_str().to_string(),
+            })
         }
     }
 
@@ -163,3 +148,53 @@ fn display_record(record: &Mapping) -> String {
         });
     format!("{{\n{}\n}}", formatter)
 }
+
+/***** CONVERSIONS ******* */
+// (These are for programming convenience,
+// not any sort of language semantics)
+
+/*************************\
+|* Exprs into Value types *|
+\*************************/
+impl<'a> TryFrom<&'a Expr> for &'a Value {
+    type Error = InternalError;
+
+    fn try_from(var: &'a Expr) -> Result<Self, InternalError> {
+        if let Expr::Value(v) = var {
+            Ok(v)
+        } else {
+            Err(InternalError::NotAValue {
+                expression: format!("{}", var),
+            })
+        }
+    }
+}
+
+/****************************\
+|* Exprs from wrapped types *|
+\****************************/
+// Coercion sugar to make it easier to create exprs and vars
+macro_rules! impl_raw_expr_conversions {
+    ($($t:ty, $v:ident);* $(;)?) => {
+        $(
+            impl From<$t> for Expr {
+                fn from(value: $t) -> Self {
+                    Expr::$v(value)
+                }
+            }
+
+            impl From<$t> for Var {
+                fn from(value: $t) -> Self {
+                    Var::new(Expr::$v(value))
+                }
+            }
+        )*
+    };
+}
+
+impl_raw_expr_conversions!(
+    Value, Value;
+    OwnedSExpr, SExpr;
+    Function, Function;
+    SpecialForm, Special;
+);

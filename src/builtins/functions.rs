@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::ast::Expr::Record;
 use crate::ast::{
     Arity, CallForm, Expr, Function, InternalError, Mapping, OwnedSExpr, SExpr,
@@ -19,7 +17,7 @@ pub(super) trait BuiltinFnBuilder {
                 .collect(),
             form: CallForm::Builtin(Self::eval),
         })
-        .new_var();
+        .into();
 
         names
             .into_iter()
@@ -43,6 +41,10 @@ pub(super) trait BuiltinFnBuilder {
 /************\
 |* Identity *|
 \************/
+
+/// Note identity function is NOT the same as quote!
+///  - Identity is a *function*, so the arguments are evaluated
+///  - Quote is a special form, the arguments are not eval'd
 pub(super) struct IdentityFnBuilder {}
 impl BuiltinFnBuilder for IdentityFnBuilder {
     fn names() -> Vec<&'static str> {
@@ -54,11 +56,12 @@ impl BuiltinFnBuilder for IdentityFnBuilder {
     }
 
     fn arity() -> Arity {
-        Arity::Variadic
+        Arity::Fixed(1)
     }
 
     fn eval(args: &SExpr) -> EResult<Var> {
-        Ok(Expr::SExpr(Vec::from(args)).new_var())
+        let val = args.first().unwrap();
+        Ok(val.clone())
     }
 }
 
@@ -84,7 +87,32 @@ impl BuiltinFnBuilder for PrintFnBuilder {
         let val: &Value = expression.try_into()?;
         let s: &str = val.try_into()?;
         println!("{s}");
-        Ok(Rc::new(Expr::empty()))
+        Ok(Var::new(Expr::empty()))
+    }
+}
+
+/*******\
+|* Len *|
+\*******/
+pub(super) struct LenFnBuilder {}
+impl BuiltinFnBuilder for LenFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["len"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["s-exp"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(1)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        let arg = args.first().unwrap().expect_sexp()?;
+
+        // PANIC: Theoretically could panic if length is too big for isize
+        Ok(Value::Int(arg.len() as isize).into())
     }
 }
 
@@ -106,10 +134,12 @@ impl BuiltinFnBuilder for FirstFnBuilder {
     }
 
     fn eval(args: &SExpr) -> EResult<Var> {
-        if let Some(arg) = args.first() {
-            Ok(arg.clone())
+        let arg = args.first().unwrap().expect_sexp()?;
+
+        if let Some(first_el) = arg.first() {
+            Ok(first_el.clone())
         } else {
-            Ok(Expr::empty().new_var())
+            Ok(Expr::empty().into())
         }
     }
 }
@@ -139,10 +169,10 @@ impl BuiltinFnBuilder for ConcatFnBuilder {
             first
                 .iter()
                 .chain(second.iter())
-                .map(Rc::clone)
+                .map(Var::clone)
                 .collect::<OwnedSExpr>(),
         )
-        .new_var())
+        .into())
     }
 }
 
@@ -167,10 +197,10 @@ impl BuiltinFnBuilder for RestFnBuilder {
         Ok(Expr::SExpr(
             args.first().unwrap().expect_sexp()?[1..]
                 .iter()
-                .map(Rc::clone)
+                .map(Var::clone)
                 .collect(),
         )
-        .new_var())
+        .into())
     }
 }
 
@@ -217,7 +247,7 @@ impl BuiltinFnBuilder for RecordFnBuilder {
                     })
             })
             .collect::<EResult<Mapping>>()
-            .map(|mapping| Record(mapping).new_var())
+            .map(|mapping| Record(mapping).into())
     }
 }
 
@@ -253,7 +283,7 @@ impl BuiltinFnBuilder for AddFnBuilder {
         let ct1 = ctypes.get(0).unwrap();
         let ct2 = ctypes.get(1).unwrap();
 
-        // awful, just awful.
+        // awful, just awful. We need types.
         let new_val = match (ct1, ct2) {
             // str | char, str | char
             (Value::Str(s1), Value::Str(s2)) => {
@@ -288,7 +318,7 @@ impl BuiltinFnBuilder for AddFnBuilder {
             },
         }?;
 
-        Ok(Expr::Value(new_val).new_var())
+        Ok(Expr::Value(new_val).into())
     }
 }
 
@@ -324,10 +354,10 @@ impl BuiltinFnBuilder for RangeFnBuilder {
         let end = *ctypes.get(1).unwrap();
         Ok(Expr::SExpr(
             (start..end)
-                .map(|n| Expr::Value(Value::from(n)).new_var())
+                .map(|n| Expr::Value(Value::from(n)).into())
                 .collect::<OwnedSExpr>(),
         )
-        .new_var())
+        .into())
     }
 }
 
@@ -375,6 +405,78 @@ impl BuiltinFnBuilder for MapFnBuilder {
         vals.into_iter()
             .map(|v| eval_function(mapfn, vec![v.clone()]))
             .collect::<EResult<Vec<Var>>>()
-            .map(|v| Expr::SExpr(v).new_var())
+            .map(|v| Expr::SExpr(v).into())
+    }
+}
+
+/************\
+|* Equality *|
+\************/
+pub(super) struct EqFnBuilder {}
+impl BuiltinFnBuilder for EqFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["eq", "=="]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["lhs", "rhs"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(sexpr: &SExpr) -> EResult<Var> {
+        let lhs = sexpr.get(0).unwrap();
+        let rhs = sexpr.get(1).unwrap();
+        Ok(Value::Bool(lhs == rhs).into())
+    }
+}
+
+pub(super) struct NeqFnBuilder {}
+impl BuiltinFnBuilder for NeqFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["ne", "!="]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["lhs", "rhs"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(sexpr: &SExpr) -> EResult<Var> {
+        let lhs = sexpr.get(0).unwrap();
+        let rhs = sexpr.get(1).unwrap();
+        Ok(Value::Bool(lhs != rhs).into())
+    }
+}
+
+pub(super) struct NegateFnBuilder {}
+impl BuiltinFnBuilder for NegateFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["negate", "!"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["val"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(1)
+    }
+
+    fn eval(sexpr: &SExpr) -> EResult<Var> {
+        let var = sexpr.get(0).unwrap();
+        if let Expr::Value(Value::Bool(val)) = var.as_ref() {
+            Ok(Value::Bool(!val).into())
+        } else {
+            Err(EvalError::Type {
+                actual: format!("{var}"),
+                expected: "Bool".to_string(),
+            })
+        }
     }
 }

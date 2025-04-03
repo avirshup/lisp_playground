@@ -1,5 +1,3 @@
-use std::iter::Peekable;
-
 use Token::*;
 
 /*************\

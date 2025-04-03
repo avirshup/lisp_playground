@@ -1,9 +1,10 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use rustyline::history::DefaultHistory;
 use rustyline::Editor;
+use rustyline::history::DefaultHistory;
 
+use crate::ast::Var;
 use crate::{ast, builtins, eval, parser};
 
 /// The repl
@@ -37,7 +38,7 @@ pub fn run() -> Result<()> {
 
         // [E]val
         let result = match eval(
-            &Rc::new(ast::Expr::SExpr(s_exp)),
+            &Var::new(ast::Expr::SExpr(s_exp)),
             &mut repl_scope,
         ) {
             Ok(result) => result,

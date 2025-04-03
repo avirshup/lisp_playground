@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
@@ -6,8 +5,7 @@ use lazy_static::lazy_static;
 use crate::ast::{
     Arity, CallForm, Expr, Function, SExpr, SpecialForm, Value, Var,
 };
-use crate::builtins::functions::BuiltinFnBuilder;
-use crate::{eval, EResult, EvalError, Scope};
+use crate::{EResult, EvalError, Scope, eval};
 
 /** See also:
   - https://clojure.org/reference/special_forms#var
@@ -27,7 +25,7 @@ pub(super) trait BuiltinSpecialBuilder {
             eval: Self::eval,
             bind_outer_scope: Self::bind_outer_scope,
         })
-        .new_var();
+        .into();
 
         names
             .into_iter()
@@ -115,7 +113,7 @@ impl BuiltinSpecialBuilder for QuoteFormBuilder {
     }
 
     fn eval(args: &SExpr, _scope: &mut Scope) -> EResult<Var> {
-        Ok(Expr::SExpr(Vec::from(args)).new_var())
+        Ok(Expr::SExpr(Vec::from(args)).into())
     }
 
     // TODO: binds nothing, right? Not 100% sure
@@ -146,7 +144,7 @@ impl BuiltinSpecialBuilder for DefVarForm {
         let value = eval(body, scope)?;
         scope.set(symbol_name, value);
 
-        Ok(Rc::new(Expr::empty()))
+        Ok(Var::new(Expr::empty()))
     }
 
     fn bind_outer_scope(
@@ -179,9 +177,9 @@ impl BuiltinSpecialBuilder for DefVarForm {
 /// - If the first argument is a symbol, evaluates the second argument then binds
 ///   it to the symbol.
 /// 2) If the second argument is an S-expr of symbols, it defines a function
-///  Specifically, the following two expressions are equivalent:
+/// Specifically, the following two expressions are equivalent:
 ///     `(define (f a1 a2 ...) (b0 b1 b2 ...))`
-///     `(define f (lambda a1 a2 ...) (b0 b1 b2 ...))`
+///     `(define f (lambda (a1 a2 ...) (b0 b1 b2 ...)))`
 pub(super) struct DefineFormBuilder;
 impl BuiltinSpecialBuilder for DefineFormBuilder {
     fn names() -> Vec<&'static str> {
@@ -216,10 +214,10 @@ impl BuiltinSpecialBuilder for DefineFormBuilder {
                     Expr::SExpr(
                         sexp[1..]
                             .iter()
-                            .map(Rc::clone)
+                            .map(Var::clone)
                             .collect(),
                     )
-                    .new_var(),
+                    .into(),
                     rhs.clone(),
                 ];
 
@@ -232,7 +230,7 @@ impl BuiltinSpecialBuilder for DefineFormBuilder {
 
                 scope.set(fn_name, form);
 
-                Ok(Expr::empty().new_var())
+                Ok(Expr::empty().into())
             },
             _other => {
                 Err(EvalError::Syntax {
@@ -259,7 +257,7 @@ impl BuiltinSpecialBuilder for DefineFormBuilder {
             },
             Expr::SExpr(sexp) => {
                 let lambda_args =
-                    vec![Rc::new(Expr::SExpr(sexp[1..].to_vec())), rhs.clone()];
+                    vec![Var::new(Expr::SExpr(sexp[1..].to_vec())), rhs.clone()];
                 LambdaFormBuilder::bind_outer_scope(
                     &lambda_args,
                     scope,
@@ -307,7 +305,7 @@ impl LambdaFormBuilder {
         // create function object
         let argnames = Self::get_argnames(sexpr.get(0).unwrap())?;
         let body = sexpr.get(1).unwrap().expect_sexp()?;
-        Ok(Rc::new(
+        Ok(Var::new(
             Function {
                 name,
                 arity: Arity::Fixed(argnames.len()),
@@ -365,7 +363,7 @@ impl BuiltinSpecialBuilder for LambdaFormBuilder {
 
         let mut child_outer = outer_scope.child();
         for name in argnames.into_iter() {
-            child_outer.set(&name, Expr::Symbol(name.clone()).new_var())
+            child_outer.set(&name, Expr::Symbol(name.clone()).into())
         }
 
         eval::bind_sexpr_outer_scope(body, &child_outer, capture_scope)
@@ -414,7 +412,7 @@ impl BuiltinSpecialBuilder for LambdaFormBuilder {
 //         let body = sexpr.get(1).unwrap().expect_sexp()?;
 //         let scope = LambdaForm::close_over(&body, &scope)?;
 //
-//         Ok(Rc::new(
+//         Ok(Var::new(
 //             SpecialForm {
 //                 name: "special".to_string(),
 //                 arity: Arity::Fixed(argnames.len()),

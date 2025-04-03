@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::iter::zip;
 use std::rc::Rc;
 
-use crate::ast::{Expr, SExpr};
+use crate::ast::{Expr, SExpr, Var};
 use crate::{EResult, EvalError};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -13,7 +13,7 @@ pub struct Scope(Rc<InnerScope>);
 #[derive(Debug, PartialEq)]
 struct InnerScope {
     parent: Option<Scope>,
-    symbols: RefCell<HashMap<String, Rc<Expr>>>,
+    symbols: RefCell<HashMap<String, Var>>,
 }
 
 impl Scope {
@@ -30,7 +30,7 @@ impl Scope {
         Scope::new(Some(parent))
     }
 
-    pub fn set(&mut self, key: &str, val: Rc<Expr>) {
+    pub fn set(&mut self, key: &str, val: Var) {
         self.0
             .symbols
             .borrow_mut()
@@ -44,7 +44,7 @@ impl Scope {
             .contains_key(symbol)
     }
 
-    pub fn lookup(&self, symbol: &str) -> Option<Rc<Expr>> {
+    pub fn lookup(&self, symbol: &str) -> Option<Var> {
         self.0
             .symbols
             .borrow()
@@ -61,7 +61,7 @@ impl Scope {
     /***********\
     |* Helpers *|
     \***********/
-    pub fn lookup_or_error(&self, symbol: &str) -> EResult<Rc<Expr>> {
+    pub fn lookup_or_error(&self, symbol: &str) -> EResult<Var> {
         self.lookup(symbol)
             .ok_or_else(|| EvalError::LookupError(symbol.to_string()))
     }

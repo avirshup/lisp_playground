@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::ast::errors::{EResult, EvalError};
 use crate::ast::{Arity, CallForm, Expr, Function, OwnedSExpr, SExpr, Var};
 use crate::scope::Scope;
@@ -28,7 +26,7 @@ pub fn eval(var: &Var, scope: &mut Scope) -> EResult<Var> {
 /// 4) everything else is a runtime error
 pub fn eval_sexpr(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
     if sexpr.is_empty() {
-        return Ok(Rc::new(Expr::empty()));
+        return Ok(Var::new(Expr::empty()));
     }
 
     // evaluate head

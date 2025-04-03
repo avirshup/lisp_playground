@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::iter::Map;
 use std::rc::Rc;
 
-use super::Var;
+use crate::ast::variables::Var;
 
 pub type Mapping = HashMap<String, Var>;
 

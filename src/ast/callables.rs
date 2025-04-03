@@ -1,8 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::iter::repeat;
 
-use super::{EResult, OwnedSExpr, SExpr, Var};
+use super::{EResult, OwnedSExpr, SExpr};
 use crate::Scope;
+use crate::ast::variables::Var;
 
 /*****************\
 |* Special forms *|
