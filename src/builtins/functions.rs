@@ -1,7 +1,4 @@
-use std::iter::Map;
 use std::rc::Rc;
-
-use itertools::Itertools;
 
 use crate::ast::Expr::Record;
 use crate::ast::{
@@ -227,6 +224,9 @@ impl BuiltinFnBuilder for RecordFnBuilder {
 /*********\
 |* Add   *|
 \*********/
+
+/// Implements the '+'/'add' function.
+/// (Kinda nasty without a type or at least dispath system)
 pub(super) struct AddFnBuilder {}
 impl BuiltinFnBuilder for AddFnBuilder {
     fn names() -> Vec<&'static str> {
@@ -288,6 +288,93 @@ impl BuiltinFnBuilder for AddFnBuilder {
             },
         }?;
 
-        Ok(Rc::new(Expr::Value(new_val)))
+        Ok(Expr::Value(new_val).new_var())
+    }
+}
+
+/***********\
+|* Range     *|
+\***********/
+
+/// Implements an _eager_ map over an s-expression.
+/// Of course lazy is better, but that needs the concept of iterability.
+/// Also, not sure it's proper to treat an s-expression like "just" a list
+/// like this?
+pub(super) struct RangeFnBuilder {}
+impl BuiltinFnBuilder for RangeFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["range"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["start", "end"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        let ctypes: Vec<isize> = args
+            .iter()
+            .map(_var_to_int)
+            .collect::<EResult<Vec<isize>>>()?;
+
+        let start = *ctypes.get(0).unwrap();
+        let end = *ctypes.get(1).unwrap();
+        Ok(Expr::SExpr(
+            (start..end)
+                .map(|n| Expr::Value(Value::from(n)).new_var())
+                .collect::<OwnedSExpr>(),
+        )
+        .new_var())
+    }
+}
+
+fn _var_to_int(var: &Var) -> EResult<isize> {
+    let cval: &Value = var.as_ref().try_into()?;
+    match cval {
+        Value::Int(n) => Ok(*n),
+        other => {
+            Err(EvalError::Type {
+                actual: format!("{other}"),
+                expected: "Int".to_string(),
+            })
+        },
+    }
+}
+
+/*********\
+|* Map   *|
+\*********/
+
+/// Implements an _eager_ map over an s-expression.
+/// Of course lazy is better, but that needs the concept of iterability.
+/// Also, not sure it's proper to treat an s-expression like "just" a list
+/// like this?
+pub(super) struct MapFnBuilder {}
+impl BuiltinFnBuilder for MapFnBuilder {
+    fn names() -> Vec<&'static str> {
+        vec!["add", "+"]
+    }
+
+    fn arguments() -> Vec<&'static str> {
+        vec!["fn", "vals"]
+    }
+
+    fn arity() -> Arity {
+        Arity::Fixed(2)
+    }
+
+    fn eval(args: &SExpr) -> EResult<Var> {
+        use crate::eval::eval_function;
+
+        let mapfn = args.get(0).unwrap().expect_fn()?;
+        let vals = args.get(1).unwrap().expect_sexp()?;
+
+        vals.into_iter()
+            .map(|v| eval_function(mapfn, vec![v.clone()]))
+            .collect::<EResult<Vec<Var>>>()
+            .map(|v| Expr::SExpr(v).new_var())
     }
 }

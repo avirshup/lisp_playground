@@ -38,7 +38,14 @@ pub fn eval_sexpr(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
     let tail = &sexpr[1..];
     match head.as_ref() {
         Expr::Special(special) => (special.eval)(tail, scope),
-        Expr::Function(func) => eval_function(func, tail, scope),
+        Expr::Function(func) => {
+            let eval_args: OwnedSExpr =
+                tail.iter()
+                    .map(|e| eval(e, scope))
+                    .collect::<Result<OwnedSExpr, EvalError>>()?;
+
+            eval_function(func, eval_args)
+        },
         _ => {
             Err(EvalError::NotCallable(
                 head.type_str().to_string(),
@@ -50,25 +57,16 @@ pub fn eval_sexpr(sexpr: &SExpr, scope: &mut Scope) -> EResult<Var> {
 /// Evaluate a function call by first evaluating all arguments, then
 /// sending the array of evaluated arguments to the proc.
 ///
-/// Note that, unlike special forms, procs don't have any access to the scope.
+/// Note that, unlike special forms, functions don't have any access to the scope.
 /// Of course scope will be accessed while evaluating the arguments,
 /// including special forms trhat may potentially modify it.
-fn eval_function(
-    func: &Function,
-    args: &SExpr,
-    scope: &mut Scope,
-) -> EResult<Var> {
-    check_arity(&func.arity, &func.name, args.len())?;
-
-    let eval_args: OwnedSExpr = args
-        .iter()
-        .map(|e| eval(e, scope))
-        .collect::<Result<OwnedSExpr, EvalError>>()?;
+pub fn eval_function(func: &Function, eval_args: OwnedSExpr) -> EResult<Var> {
+    check_arity(&func.arity, &func.name, eval_args.len())?;
 
     match &func.form {
         CallForm::Builtin(f) => f(&eval_args),
         CallForm::Lambda { sexpr, scope } => {
-            let mut arg_scope = scope.bind_args(&func.arguments, args);
+            let mut arg_scope = scope.bind_args(&func.arguments, &eval_args);
             eval_sexpr(sexpr, &mut arg_scope)
         },
     }

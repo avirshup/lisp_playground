@@ -79,6 +79,18 @@ impl Expr {
         }
     }
 
+    pub fn expect_fn(&self) -> Result<&Function, EvalError> {
+        match self {
+            Expr::Function(lisp_fn) => Ok(lisp_fn),
+            _other => {
+                Err(EvalError::Syntax {
+                    expected: "Function".to_string(),
+                    actual: self.type_str().to_string(),
+                })
+            },
+        }
+    }
+
     pub fn expect_sexp(&self) -> Result<&SExpr, EvalError> {
         match self {
             Expr::SExpr(sexp) => Ok(sexp),

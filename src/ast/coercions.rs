@@ -57,12 +57,12 @@ impl_expr_from_type!(
 macro_rules! impl_ctype_conversions {
     ($($t:ty, $v:ident);* $(;)?) => {
         $(
-            impl TryFrom<Value> for $t {
+            impl TryFrom<&Value> for $t {
                 type Error = InternalError;
 
-                fn try_from(value: Value) -> Result<Self, Self::Error> {
-                    if let Value::$v(native_val) = value {
-                        Ok(native_val)
+                fn try_from(value: &Value) -> Result<Self, Self::Error> {
+                    if let Value::$v(native_val) = &value {
+                        Ok(native_val.clone())
                     } else {
                         Err(InternalError::Conversion{
                             builtin_type: "CType::$v".to_string(),
