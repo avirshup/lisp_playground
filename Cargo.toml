@@ -1,5 +1,5 @@
 [package]
-name = "interpret-lisp"
+name = "lisp_playground"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,11 +10,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "main"
 path = "src/main.rs"
-
-[[bin]]
-name = "tester"
-path = "src/testbin.rs"
-
 
 
 [dependencies]
